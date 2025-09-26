@@ -1,0 +1,249 @@
+---
+title: "First Machine Learning exercise"
+author: "Sebastián Tyrrell"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Machine Learning part i
+
+Taken from edX HarvardX PH125.8xData Science: Machine Learning, this is an exercise in a single variable training of an ML model: using height to predict sex.
+
+Sex is categorical: 
+
+- createDataPartition(y,  # data to split
+                      times = 1, # how many times to split (nbr partitions - 1)
+                      p = 0.5, # proportion represented by (new) index?
+                      list = FALSE ) # how to return
+                      
+This first exercise involves heights dataset and predicting sex from height. 
+
+```{r intro, echo=FALSE}
+library(tidyverse)
+library(caret)
+library(dslabs)
+data(heights)
+```
+
+```{r definitions}
+# define the outcome and predictors
+y <- heights$sex        # y is the set of outcomes, 
+x <- heights$height     # x is the set of features, here just one
+```
+
+Next we split the training and test sets - half and half here
+The "createDataPartition" function produces a matrix of indices allowing us to (randomly) select the training set and the other set. 
+
+```{r partition}
+# generate training and test sets
+set.seed(2007)
+test_index <- createDataPartition(y, times = 1, p = 0.5, list = FALSE)
+test_set <- heights[test_index, ]
+train_set <- heights[-test_index, ]
+```
+
+Next we provide a kind of placebo outcome, straightforward guessing. 
+Use "sample".
+
+The use of factor here is just a way of matching the string output of sample to the factor values of sex - but (just tested) the "levels" function could be used directly in sample.
+
+```{r guessing}
+# guess the outcome
+y_hat <- sample(c("Male", "Female"), length(test_index), replace = TRUE) |> 
+  factor(levels = levels(test_set$sex))
+
+# compute accuracy
+mean(y_hat == test_set$sex)
+```
+```{r first crude model}
+
+# compare heights in males and females in our data set
+heights |> group_by(sex) |> summarise(mean(height), sd(height))
+
+# now try predicting "male" if the height is within 2 SD of the average male
+y_hat <- ifelse(x > 62, "Male", "Female") |> factor(levels = levels(test_set$sex))
+```
+
+The outcome of this - the proportion of correct predictions - 
+Because it is binary and so reversible is this also the sensitivity / "recall"?
+
+```{r recall}
+mean(y == y_hat)
+mean (y_hat == "Female" & y == "Female")
+mean (y_hat == "Male" & y == "Male")
+```
+Haven't quite got this right but let's see what is next?
+Select a cut-off that best matches the training set. 
+This gives an "accuracy" figure: again this is just number correct / total number
+
+```{r different cut-offs}
+# examine the accuracy of 10 cutoffs
+cutoff <- seq(61, 70)
+accuracy <- map_dbl(cutoff, function(x){
+  y_hat <- ifelse(train_set$height > x, "Male", "Female") |> 
+    factor(levels = levels(test_set$sex))
+  mean(y_hat == train_set$sex)
+})
+
+data.frame(cutoff, accuracy) %>% 
+  ggplot(aes(cutoff, accuracy)) + 
+  geom_point() + 
+  geom_line() 
+max(accuracy)
+
+best_cutoff <- cutoff[which.max(accuracy)]
+best_cutoff
+```
+So now where are we going? 
+
+```{r check with test set}
+y_hat <- ifelse(test_set$height > best_cutoff, "Male", "Female") |> 
+  factor(levels = levels(test_set$sex))
+y_hat <- factor(y_hat)
+mean(y_hat == test_set$sex)
+```
+Let's move to the questions: 
+
+"In the course videos, height cutoffs were used to predict sex. Instead of height, use the type variable to predict sex. Assume that for each class type the students are either all male or all female, based on the most prevalent sex in each class type you calculated in Q1. Report the accuracy of your prediction of sex based on type. You do not need to split the data into training and test sets.
+Enter your accuracy as a percentage or decimal (eg "50%" or "0.50") to at least the hundredths place."
+
+The set-up (provided) filters the reported_heights dataset for a specific period so that it can be determined whether the student took the class in person or online.
+
+The initial hypothesis (based on earlier questions) is that all in class students will be predicted as female, online as male.
+
+```{r set it up}
+data(reported_heights)
+
+dat <- mutate(reported_heights, date_time = ymd_hms(time_stamp)) |>
+  filter(date_time >= make_date(2016, 01, 25) & date_time < make_date(2016, 02, 1)) |>
+  mutate(type = ifelse(day(date_time) == 25 & hour(date_time) == 8 & between(minute(date_time), 15, 30), "inclass","online")) |>
+  select(sex, type)
+
+y <- factor(dat$sex, c("Female", "Male"))
+x <- dat$type
+
+# now try predicting "female" if the class is in person 
+
+y_hat <- ifelse(x == "inclass", "Female", "Male") |> factor(levels = levels(test_set$sex))
+mean(y == y_hat)
+```
+Producing a confusion matrix
+
+```{r confusion}
+table(y_hat, y)
+```
+
+Determining the sensitivity using the "caret" function "sensitivity"
+Sensitivity (recall) is the true positive rate: here proportion of actual females identified as female.
+Or TP/(TP+FN)
+
+```{r sensitivity}
+sensitivity(y_hat, y)
+```
+Next up: determining the specificity using the "caret" function "specificity"
+Specificity is the true negative rate: here proportion of actual not-females (males) identified as not-female (male).
+Or TN/(TN+FP) (Pr(^Y =0 : Y = 0))
+
+
+```{r specificity}
+specificity(y_hat, y)
+```
+Finally for this page, prevalence of female in the original dat  dataset (still represented by the vector "y"
+
+(TP+FN)/(TP+FP+TN+FN) 
+
+which is simply: 
+
+mean (y == "Female")
+
+```{r prevalence}
+mean (y == "Female")
+```
+
+Right: we are missing some bits here but never mind.
+Now looking a "k nearest neighbours" to predict heights
+
+```
+data("heights")
+
+# set.seed(1) # if using R 3.5 or earlier
+set.seed(1, sample.kind = "Rounding") # if using R 3.6 or later
+
+## Warning in set.seed(1, sample.kind = "Rounding"): non-uniform 'Rounding' sampler used
+
+test_index <- createDataPartition(heights$sex, times = 1, p = 0.5, list = FALSE)
+test_set <- heights[test_index, ]
+train_set <- heights[-test_index, ]     
+                
+ks <- seq(1, 101, 3)
+F_1 <- sapply(ks, function(k){
+    fit <- knn3(sex ~ height, data = train_set, k = k)
+    y_hat <- predict(fit, test_set, type = "class") |> 
+        factor(levels = levels(train_set$sex))
+    F_meas(data = y_hat, reference = test_set$sex)
+})
+plot(ks, F_1)
+max(F_1)
+ks[which.max(F_1)]
+
+```
+
+Moving to the second question: based on the gene expression data (completely forgotten)
+
+```
+library(dslabs)
+library(caret)
+data("tissue_gene_expression")
+
+y <- tissue_gene_expression$y
+x <- tissue_gene_expression$x
+
+set.seed(1, sample.kind = "Rounding")
+#set.seed(1)
+#test_index <- createDataPartition(y, times = 1, p = 0.5, list = FALSE)
+test_index <- -createDataPartition(y, list = FALSE)
+
+# a bit lost on what the division is here
+#test_set <- x[test_index, ]
+#train_set <- tissue_gene_expression[-test_index, ]     
+
+sapply(seq(1, 11, 2), function(k){
+    fit <- knn3(x[-test_index,], y[-test_index], k = k)
+    y_hat <- predict(fit, newdata = data.frame(x=x[test_index,]),
+                type = "class")
+mean(y_hat == y[test_index])
+})
+
+# alternative ?
+
+set.seed(1, sample.kind = "Rounding")
+library(caret)
+y <- tissue_gene_expression$y
+x <- tissue_gene_expression$x
+train_index <- createDataPartition(y, list = FALSE)
+sapply(seq(1, 11, 2), function(k){
+  fit <- knn3(x[train_index,], y[train_index], k = k)
+  y_hat <- predict(fit, newdata = data.frame(x=x[-train_index,]),
+                   type = "class")
+  mean(y_hat == y[-train_index])
+})
+
+# take 3 
+
+set.seed(1, sample.kind = "Rounding") # if using R 3.6 or later
+y <- tissue_gene_expression$y
+x <- tissue_gene_expression$x
+test_index <- createDataPartition(y, list = FALSE)
+sapply(seq(1, 11, 2), function(k){
+  fit <- knn3(x[-test_index,], y[-test_index], k = k)
+  y_hat <- predict(fit, newdata = data.frame(x=x[test_index,]),
+                   type = "class")
+  mean(y_hat == y[test_index])
+})
+
+
+```

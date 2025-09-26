@@ -1,0 +1,219 @@
+---
+title: "Titanic exercise"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+Use createDataPartition to identify test indices, then allocate titanic_clean appropriately. 
+p == 0.2 : 20% for test
+times = 1 ?
+list = FALSE ? 
+
+
+```{r}
+library(titanic)    # loads titanic_train data frame
+library(caret)
+library(tidyverse)
+library(rpart)
+
+# 3 significant digits
+options(digits = 3)
+
+# clean the data - `titanic_train` is loaded with the titanic package
+titanic_clean <- titanic_train %>%
+    mutate(Survived = factor(Survived),
+           Embarked = factor(Embarked),
+           Age = ifelse(is.na(Age), median(Age, na.rm = TRUE), Age), # NA age to median age
+           FamilySize = SibSp + Parch + 1) %>%    # count family members
+    select(Survived,  Sex, Pclass, Age, Fare, SibSp, Parch, FamilySize, Embarked)
+
+#set.seed(42, sample.kind = 'Rounding') # if R version >= 3.6
+set.seed(42)
+
+testIndex <- createDataPartition (titanic_clean$Survived, times = 1, p = 0.2, list = FALSE)
+train_set <- titanic_clean[-testIndex,]
+test_set <- titanic_clean[testIndex,]
+
+str(titanic_clean)
+nrow(train_set)
+nrow(test_set)
+
+
+```
+The simplest prediction method is randomly guessing the outcome without using additional predictors. These methods will help us determine whether our machine learning algorithm performs better than chance. How accurate are two methods of guessing Titanic passenger survival?
+
+Set the seed to 3. For each individual in the test set, randomly guess whether that person survived or not by sampling from the vector c(0,1) (Note: use the default argument setting of prob from the sample function).
+What is the accuracy of this guessing method?
+```{r}
+set.seed(3)
+guesstimate <- sample (c(0,1), nrow (test_set), replace = TRUE)
+
+test_set |> filter (Survived == guesstimate) |> summarise(n()/nrow(test_set))
+
+```
+
+ Question 3a: Predicting survival by sex
+0.0/2.0 points (graded)
+
+Use the training set to determine whether members of a given sex were more likely to survive or die. 
+
+NOTE: somehow the male figure is wrong even though it seems fine!
+
+```{r}
+
+train_set |> group_by (Sex) |> summarise(mean(Survived == 1)) 
+```
+
+# Question 3b: Question 3b: Predicting survival by sex
+# Use the training set to determine whether members of a given sex were more likely to survive or die. 
+# Apply this insight to generate survival predictions on the test set.
+# Predict survival using sex on the test set: if the survival rate for a sex is over 0.5, predict survival 
+# for all individuals of that sex, and predict death if the survival rate for a sex is under 0.5.
+
+# What is the accuracy of this sex-based prediction method on the test set?
+```{r}
+
+sex_model <- ifelse(test_set$Sex == "female", 1, 0)    # predict Survived=1 if female, 0 if male
+mean(sex_model == test_set$Survived)    # calculate accuracy
+```
+
+Q4a: survival by class - reuse the earlier survival by sex
+
+```{r}
+train_set |> group_by (Pclass) |> summarise(mean(Survived == 1)) 
+```
+
+Q4b Predict survival using passenger class on the test set: predict survival if the survival rate for a class is over 0.5, otherwise predict death.
+What is the accuracy of this class-based prediction method on the test set?
+
+```{r}
+
+class_model <- ifelse(test_set$Pclass == 1, 1, 0)    # predict Survived=1 if first class, 0 otherwise
+mean(class_model == test_set$Survived)    # calculate accuracy
+```
+Q4c Use the training set to group passengers by both sex and passenger class.
+Which sex and class combinations were more likely to survive than die (i.e. >50% survival)?
+```{r}
+train_set |> group_by (Pclass, Sex) |> summarise(mean(Survived == 1)) 
+```
+
+Q4d: Now repeat with a combination ... 
+
+```{r}
+comb_model <- ifelse(test_set$Sex == "female" & (test_set$Pclass == 1 | test_set$Pclass == 2), 1, 0)    
+# predict Survived=1 if first/second class female class, 0 otherwise
+mean(comb_model == test_set$Survived)    # calculate accuracy
+```
+Some other suggests for developing this model
+```{r}
+# Question 4c: Predicting survival by passenger class
+# Group passengers by both sex and passenger class.
+# Which sex and class combinations were more likely to survive than die?
+
+survival_class <- titanic_clean %>%
+  group_by(Sex, Pclass) %>%
+  summarize(PredictingSurvival = ifelse(mean(Survived == 1) > 0.5, 1, 0))
+survival_class
+
+# or -right answer-
+
+train_set %>%
+  group_by(Sex, Pclass) %>%
+  summarize(Survived = mean(Survived == 1)) %>%
+  filter(Survived > 0.5)
+```
+
+
+ Question 5a: Confusion matrix
+0.0/2.0 points (graded)
+
+Use the confusionMatrix() function to create confusion matrices for the sex model, class model, and combined sex and class model. You will need to convert predictions and survival status to factors to use this function.
+What is the "positive" class used to calculate confusion matrix metrics?
+0
+```{r}
+library(broom)
+sex_model <- train_set |>
+  group_by(Sex) |>
+  summarise(Survived_predict = ifelse(mean(Survived == 1) > 0.5, 1, 0))
+
+test_set1 <- test_set |>
+  inner_join(sex_model, by = 'Sex')
+cm1 <- confusionMatrix(data = factor(test_set1$Survived_predict), reference = factor(test_set1$Survived))
+
+cm1 |>
+  tidy() |>
+  filter(term == 'sensitivity') |>
+  _$estimate
+
+cm1 |>
+  tidy() |>
+  filter(term == 'specificity') |>
+  _$estimate
+cm1 |>
+  tidy() |>
+  filter(term == 'balanced_accuracy') |>
+  _$estimate
+
+# Confusion Matrix: class model
+class_model <- train_set |>
+  group_by(Pclass) |>
+  summarise(Survived_predict = ifelse(mean(Survived == 1) > 0.5, 1, 0))
+
+test_set2 <- test_set |>
+  inner_join(class_model, by = 'Pclass')
+
+cm2 <- confusionMatrix(data = factor(test_set2$Survived_predict), reference = factor(test_set2$Survived))
+
+cm2 |>
+  tidy() |>
+  filter(term == 'sensitivity') |>
+  _$estimate
+
+cm2 |>
+  tidy() |>
+  filter(term == 'specificity') |>
+  _$estimate
+
+cm2 |>
+  tidy() |>
+  filter(term == 'balanced_accuracy') |>
+  _$estimate
+
+# Confusion Matrix: sex and class model
+
+sex_class_model <- train_set |>
+  group_by(Sex, Pclass) %>%
+  summarise(Survived_predict = ifelse(mean(Survived == 1) > 0.5, 1, 0))
+
+test_set3 <- test_set |>
+  inner_join(sex_class_model, by=c('Sex', 'Pclass'))
+
+cm3 <- confusionMatrix(data = factor(test_set3$Survived_predict), reference = factor(test_set3$Survived))
+cm3 |>
+  tidy() |>
+  filter(term == 'sensitivity') |>
+  _$estimate
+
+cm3 |>
+  tidy() |>
+  filter(term == 'specificity') |>
+  _$estimate
+
+cm3 |>
+  tidy() |>
+  filter(term == 'balanced_accuracy') |>
+  _$estimate
+
+#Q6b
+F_meas (data = factor(test_set1$Survived_predict), reference = factor(test_set1$Survived))
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

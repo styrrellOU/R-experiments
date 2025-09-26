@@ -1,0 +1,82 @@
+---
+title: "Lahman by year"
+author: "Sebastián Tyrrell"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This docoments relates the process of developing the answers to the assessment for §2.4 of the HarvardX course: _HarvardX PH125.7x Linear Regression_.
+
+It reflects the author's initial lack of understanding of why the code prepared actually worked.
+
+```{r lahman, echo = FALSE}
+library(tidyverse)
+library(Lahman)
+library(broom)
+data(Teams)
+```
+
+Need to do more on this and also on how the "predict" function works ! (Q5 etc in the verified track)
+
+Step 1 seems quite straightforward - filter the required years (here 1961-2018), calculate the per game stats and then select only the necessary columns.
+
+```{r lahman2}
+annual <- Teams |> filter (yearID %in% 1961:2018) |> 
+  mutate(HR = HR/G, 
+         BB = BB/G,
+         R = R/G) |>
+  select (yearID, HR, BB, R)
+
+class(annual)
+
+```
+
+The next step is to group the data by yearID - it looks pretty grouped already but not formally, R does not recognise it as grouped. 
+  
+```{r lahman3}
+
+annual <- annual |> group_by(yearID)
+
+annual
+
+class(annual)
+
+```
+
+Now we introduce the linear modelling - but what is going on? 
+
+The do command (superseded) applies the interior command (the "tidy") to each group
+The lm command does the 
+ 
+```{r lahman4}
+
+annual <- annual |> do(tidy(lm(R ~ BB + HR, data = .)))
+
+annual
+
+class(annual)
+
+```
+
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

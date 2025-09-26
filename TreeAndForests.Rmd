@@ -1,0 +1,148 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+```{r}
+# Load tidyverse
+library(tidyverse)
+  
+# load package for decision tree
+library(rpart)
+
+# load the dslabs package
+library(dslabs)
+
+# fit a classification tree using the polls_2008 dataset, 
+# which contains only one predictor (day)
+# and the outcome (margin)
+fit <- rpart(margin ~ ., data = polls_2008)
+
+# display the decision tree
+plot(fit, margin = 0.1)
+text(fit, cex = 0.75)
+
+# examine the fit from the classification tree model
+polls_2008 %>%  
+  mutate(y_hat = predict(fit)) %>% 
+  ggplot() +
+  geom_point(aes(day, margin)) +
+  geom_step(aes(day, y_hat), col="red")
+
+# fit a classification tree on the mnist data using cross validation
+train_rpart <- train(y ~ .,
+              method = "rpart",
+              tuneGrid = data.frame(cp = seq(0.0, 0.1, len = 25)),
+              data = mnist_27$train)
+# and plot it
+plot(train_rpart)
+
+# compute accuracy
+confusionMatrix(predict(train_rpart, mnist_27$test), mnist_27$test$y)$overall["Accuracy"]
+
+# view the final decision tree
+plot(train_rpart$finalModel, margin = 0.1) # plot tree structure
+text(train_rpart$finalModel) # add text labels
+  
+# load library for random forest
+library(randomForest)
+train_rf <- randomForest(y ~ ., data=mnist_27$train)
+confusionMatrix(predict(train_rf, mnist_27$test), mnist_27$test$y)$overall["Accuracy"]
+
+# use cross validation to choose parameter
+train_rf_2 <- train(y ~ .,
+      method = "Rborist",
+      tuneGrid = data.frame(predFixed = 2, minNode = c(3, 50)),
+      data = mnist_27$train)
+confusionMatrix(predict(train_rf_2, mnist_27$test), mnist_27$test$y)$overall["Accuracy"]
+```
+
+
+```{r}
+library(rpart)
+n <- 1000
+sigma <- 0.25
+set.seed(1)
+x <- rnorm(n, 0, 1)
+y <- 0.75 * x + rnorm(n, 0, sigma)
+dat <- data.frame(x = x, y = y)
+fit <- rpart(y ~ ., data = dat) 
+dat %>% 
+	mutate(y_hat = predict(fit)) %>% 
+	ggplot() +
+	geom_point(aes(x, y)) +
+  geom_step(aes(x, y_hat), col=2)
+
+```
+
+```{r}
+
+library(randomForest)
+fit <- randomForest(y ~ x, data = dat) 
+dat %>% 
+	mutate(y_hat = predict(fit)) %>% 
+	ggplot() +
+	geom_point(aes(x, y)) +
+	geom_step(aes(x, y_hat), col = "red")
+
+fit <- randomForest(y ~ x, data = dat, nodesize = 50, maxnodes = 25)
+```
+Below is a set of commands for the Caret packages test sequence. Go back over this to explain what is happening 
+
+```{r}
+library (caret)
+library (rpart)
+data (tissue_gene_expression)
+# cp <- seq(0, 0.1, 0.01)
+set.seed(1991)
+    
+fit <- with(tissue_gene_expression, 
+                train(x, y, method = "rpart", control = rpart.control(minsplit = 0), 
+                      tuneGrid = data.frame(cp = seq(0, 0.1, 0.01))))
+
+#fit2 <- tissue_gene_expression |> train(x, y, method = "rpart",
+#                      tuneGrid = data.frame(cp = seq(0, 0.1, 0.01)))
+    
+confusionMatrix(fit)$overall["Accuracy"]
+
+ggplot(fit)
+
+#fit == fit2
+
+### check the structure of fit at this point, I am a bit lost !
+
+plot(fit$finalModel)
+text(fit$finalModel)
+
+```
+Q4: We can see that with just seven genes, we are able to predict the tissue type. Now let's see if we can predict the tissue type with even fewer genes using a Random Forest. Use the train() function and the rf method to train a Random Forest model and save it to an object called fit. Try out values of mtry ranging from seq(50, 200, 25) (you can also explore other values on your own). What mtry value maximizes accuracy? To permit small nodesize to grow as we did with the classification trees, use the following argument: nodesize = 1.
+
+Note: This exercise will take some time to run. If you want to test out your code first, try using smaller values with ntree. Set the seed to 1991 again.
+What value of mtry maximizes accuracy?
+
+ggplot (fit) - what is happening here: it is clearly more behid it that the simple plot
+
+```{r}
+set.seed(1991)
+fit <- with(tissue_gene_expression, 
+                train(x, y, method = "rf", nodesize = 1, 
+                      tuneGrid = data.frame(mtry = seq(50, 200, 25))))
+ggplot(fit)
+
+```
+
+
